@@ -21,11 +21,11 @@ const (
 )
 
 type requestContext struct {
-	questionType     uint32 //问题类型：0-随机,1-逻辑推理,2-简单常识,3-简单计算,4-常见诗词,5-常见成语,6-娱乐题型……大于1000-企业定制
-	firmId           uint32 //企业ID：与生成时主键id一致
-	currentTimestamp string //接口调用时生成的时间戳
-	digitalSignature string //以上请求字段通过sha256生产摘要后再通过私钥加密生成的数字签名
-	privateKey       string //字符串类型的私钥
+	questionType     uint32 //问题类型_ 0-随机,1-逻辑推理,2-简单常识,3-简单计算,4-常见诗词,5-常见成语,6-娱乐题型……大于1000-企业定制
+	firmId           uint32 //企业ID_ 与生成时数据库主键id一致
+	currentTimestamp string //当前时间戳_ 接口调用时生成的时间戳
+	digitalSignature string //数字签名_ 上面三个字段通过sha256生成摘要后,再通过私钥加密生成的数字签名
+	privateKey       string //私钥_ 字符串类型的私钥,用于生成数字签名
 }
 
 func newRequestContext(questionType uint32, firmId uint32, privateKey string) *requestContext {
@@ -63,6 +63,7 @@ func (rc *requestContext) generateDigitalSignature() error {
 	if err != nil {
 		return err
 	}
+
 	//sha256生成bytes摘要
 	msg := fmt.Sprintf("%d%d%v", rc.questionType, rc.firmId, rc.currentTimestamp)
 	bytes := sha256.Sum256([]byte(msg))
@@ -71,6 +72,7 @@ func (rc *requestContext) generateDigitalSignature() error {
 	if err != nil {
 		return err
 	}
+
 	rc.digitalSignature = r.String() + DIGITAL_SIGNATURE_CONNECTOR + s.String()
 
 	return nil
@@ -83,6 +85,7 @@ func (rc *requestContext) generateGetURL(baseUrl string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	params.Set("questionType", strconv.Itoa(int(rc.questionType)))
 	params.Set("firmId", strconv.Itoa(int(rc.firmId)))
 	params.Set("currentTimestamp", rc.currentTimestamp)

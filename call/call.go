@@ -11,13 +11,13 @@ import (
 const BASE_URL = "http://127.0.0.1:4523/m1/1594305-0-default/output"
 
 type ResponseBody struct {
-	Status int          `json:"status"` //0表示成功
-	Msg    string       `json:"msg"`    //请求未成功时msg不为空
+	Status int          `json:"status"` //状态码_ 0表示成功
+	Msg    string       `json:"msg"`    //错误信息_ 请求未成功时msg不为空
 	Data   ResponseData `json:"data"`
 }
 
 type ResponseData struct {
-	RemainTimes int    `json:"remainTimes"` //剩余调用次数：-1表示无限制
+	RemainTimes int    `json:"remainTimes"` //剩余调用次数_ -1表示无限制
 	Question    string `json:"question"`
 	Answer      string `json:"answer"`
 }
@@ -62,7 +62,7 @@ func GetQuestion(questionType uint32, firmId uint32, privateKey string) (*Respon
 	return &rb.Data, nil
 }
 
-//一般密钥以文件形式保存，此接口需传入密钥文件路径
+//此接口需传入密钥文件路径_一般密钥以pem文件形式保存
 func GetQuestionByPath(questionType uint32, firmId uint32, privateKeyFilePath string) (*ResponseData, error) {
 	//读取私钥文件
 	privateKeyFile, err := os.Open(privateKeyFilePath)
@@ -70,10 +70,12 @@ func GetQuestionByPath(questionType uint32, firmId uint32, privateKeyFilePath st
 		return nil, err
 	}
 	defer privateKeyFile.Close()
+
 	privateKeyInfo, err := privateKeyFile.Stat()
 	if err != nil {
 		return nil, err
 	}
+
 	privateKeyBytes := make([]byte, privateKeyInfo.Size())
 	privateKeyFile.Read(privateKeyBytes)
 
