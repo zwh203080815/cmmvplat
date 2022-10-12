@@ -5,92 +5,149 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"net/url"
 	"strconv"
 	"time"
 )
 
 const (
-	QUESTION_TYPE_RANGE         = 6
-	FIRM_ID_RANGE               = 0
+	QUESTION_TYPE_START         = 0
+	QUESTION_TYPE_END           = 6
+	FIRM_ID_LENGTH              = 18
 	PRIVATE_KEY_LENGTH          = 229
 	DIGITAL_SIGNATURE_CONNECTOR = "@==@"
+	BASE_URL                    = "http://127.0.0.1:4523/m1/1594305-0-default/output"
 )
 
-type requestContext struct {
-	questionType     uint32 //问题类型_ 0-随机,1-逻辑推理,2-简单常识,3-简单计算,4-常见诗词,5-常见成语,6-娱乐题型……大于1000-企业定制
-	firmId           uint32 //企业ID_ 与生成时数据库主键id一致
-	currentTimestamp string //当前时间戳_ 接口调用时生成的时间戳
-	digitalSignature string //数字签名_ 上面三个字段通过sha256生成摘要后,再通过私钥加密生成的数字签名
-	privateKey       string //私钥_ 字符串类型的私钥,用于生成数字签名
-}
+type (
+	RequestPrepare interface {
+		CheckParams() error
+		GenerateDigitalSignature() error
+		SendHttp() (*ResponseData, error)
+	}
 
-func newRequestContext(questionType uint32, firmId uint32, privateKey string) *requestContext {
-	return &requestContext{
+	requestVariable struct {
+		questionType     int    //问题类型_ 0-随机,1-简单常识,2-简单计算,3-逻辑推理,4-科学常识,5-常见诗词成语,6-简单历史,7-娱乐题型……大于1000-企业定制
+		firmID           string //企业ID_ 与生成时数据库主键id一致
+		currentTimestamp string //当前时间戳_ 接口调用时生成的时间戳
+		digitalSignature string //数字签名_ 上面三个字段通过sha256生成摘要后,再通过私钥加密生成的数字签名
+		privateKey       string //私钥_ 字符串类型的私钥,用于生成数字签名
+	}
+
+	ResponseBody struct {
+		Status int          `json:"status"` //状态码_ 0表示成功
+		Msg    string       `json:"msg"`    //错误信息_ 请求未成功时msg不为空
+		Data   ResponseData `json:"data"`
+	}
+
+	ResponseData struct {
+		RemainTimes int    `json:"remainTimes"` //剩余调用次数_ -1表示无限制
+		Question    string `json:"question"`
+		Answer      string `json:"answer"`
+	}
+)
+
+func NewRequestPrepare(questionType int, firmID string, privateKey string) RequestPrepare {
+	return &requestVariable{
 		questionType:     questionType,
-		firmId:           firmId,
+		firmID:           firmID,
 		currentTimestamp: strconv.FormatInt(time.Now().UnixNano(), 10),
 		privateKey:       privateKey,
 	}
 }
 
 //参数校验
-func (rc *requestContext) checkParams() error {
+func (rv *requestVariable) CheckParams() error {
 
-	if rc.questionType > QUESTION_TYPE_RANGE {
-		return errors.New("暂无此问题类型: questionType=" + strconv.Itoa(int(rc.questionType)))
+	if rv.questionType < QUESTION_TYPE_START || rv.questionType > QUESTION_TYPE_END {
+		return errors.New("暂无此问题类型: questionType=" + strconv.Itoa(rv.questionType))
 	}
 
-	if rc.firmId > FIRM_ID_RANGE {
-		return errors.New("企业ID错误: firmId=" + strconv.Itoa(int(rc.firmId)))
+	if len(rv.firmID) > FIRM_ID_LENGTH {
+		return errors.New("企业ID错误: firmID=" + rv.firmID)
 	}
 
-	if len(rc.privateKey) != PRIVATE_KEY_LENGTH {
-		return errors.New("私钥错误: privateKey=" + rc.privateKey)
+	if len(rv.privateKey) != PRIVATE_KEY_LENGTH {
+		return errors.New("私钥错误: privateKey=" + rv.privateKey)
 	}
 
 	return nil
 }
 
 //生成数字签名
-func (rc *requestContext) generateDigitalSignature() error {
+func (rv *requestVariable) GenerateDigitalSignature() error {
+
 	//将字符串私钥转化为ECC私钥
-	block, _ := pem.Decode([]byte(rc.privateKey))             //pem解码
-	eccPrivateKey, err := x509.ParseECPrivateKey(block.Bytes) //x509解码
+	block, _ := pem.Decode([]byte(rv.privateKey))   //pem解码
+	ecc, err := x509.ParseECPrivateKey(block.Bytes) //x509解码
 	if err != nil {
 		return err
 	}
 
 	//sha256生成bytes摘要
-	msg := fmt.Sprintf("%d%d%v", rc.questionType, rc.firmId, rc.currentTimestamp)
+	msg := fmt.Sprintf("%d%v%v", rv.questionType, rv.firmID, rv.currentTimestamp)
 	bytes := sha256.Sum256([]byte(msg))
+
 	//用ECC私钥加密摘要获得数字签名
-	r, s, err := ecdsa.Sign(rand.Reader, eccPrivateKey, bytes[:])
+	r, s, err := ecdsa.Sign(rand.Reader, ecc, bytes[:])
 	if err != nil {
 		return err
 	}
 
-	rc.digitalSignature = r.String() + DIGITAL_SIGNATURE_CONNECTOR + s.String()
+	rbytes, err := r.MarshalText()
+	sbytes, err := s.MarshalText()
+	if err != nil {
+		return err
+	}
+
+	rv.digitalSignature = string(rbytes) + DIGITAL_SIGNATURE_CONNECTOR + string(sbytes)
 
 	return nil
 }
 
-//生成get请求的URL
-func (rc *requestContext) generateGetURL(baseUrl string) (string, error) {
+//发送http请求
+func (rv *requestVariable) SendHttp() (*ResponseData, error) {
+
+	//拼装get请求url
 	params := url.Values{}
-	parseURL, err := url.Parse(baseUrl)
+	url, err := url.Parse(BASE_URL)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	params.Set("questionType", strconv.Itoa(int(rc.questionType)))
-	params.Set("firmId", strconv.Itoa(int(rc.firmId)))
-	params.Set("currentTimestamp", rc.currentTimestamp)
-	params.Set("digitalSignature", rc.digitalSignature)
-	parseURL.RawQuery = params.Encode()
+	params.Set("questionType", strconv.Itoa(rv.questionType))
+	params.Set("firmID", rv.firmID)
+	params.Set("currentTimestamp", rv.currentTimestamp)
+	params.Set("digitalSignature", rv.digitalSignature)
+	url.RawQuery = params.Encode()
 
-	return parseURL.String(), nil
+	//发送get请求
+	resp, err := http.Get(url.String())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	//处理响应结果
+	jsonData, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var rb ResponseBody
+	if err = json.Unmarshal(jsonData, &rb); err != nil {
+		return nil, err
+	}
+
+	if rb.Status != 0 {
+		return nil, errors.New(rb.Msg)
+	}
+
+	return &rb.Data, nil
 }
