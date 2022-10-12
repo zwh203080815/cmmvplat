@@ -22,7 +22,7 @@ const (
 	FIRM_ID_LENGTH              = 18
 	PRIVATE_KEY_LENGTH          = 229
 	DIGITAL_SIGNATURE_CONNECTOR = "@==@"
-	BASE_URL                    = "http://127.0.0.1:4523/m1/1594305-0-default/output"
+	BASE_URL                    = "http://127.0.0.1:8888"
 )
 
 type (
