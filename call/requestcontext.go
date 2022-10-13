@@ -1,6 +1,7 @@
 package call
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/sha256"
@@ -47,9 +48,10 @@ type (
 	}
 
 	ResponseData struct {
-		RemainTimes int    `json:"remainTimes"` //剩余调用次数_ -1表示无限制
-		Question    string `json:"question"`
-		Answer      string `json:"answer"`
+		Question      string `json:"question"`
+		Answer        string `json:"answer"`
+		DisturbAnswer string `json:"disturbAnswer"` //干扰选项
+		RemainTimes   int    `json:"remainTimes"`   //剩余调用次数_ -1表示无限制
 	}
 )
 
@@ -134,6 +136,11 @@ func (rv *requestVariable) SendHttp() (*ResponseData, error) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode%100 != 2 {
+		buf := new(bytes.Buffer)
+		buf.ReadFrom(resp.Body)
+		return nil, errors.New(buf.String())
+	}
 	//处理响应结果
 	jsonData, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -148,6 +155,8 @@ func (rv *requestVariable) SendHttp() (*ResponseData, error) {
 	if rb.Status != 0 {
 		return nil, errors.New(rb.Msg)
 	}
-
+	/////////////////////////
+	rb.Data.RemainTimes = -1
+	/////////////////////////
 	return &rb.Data, nil
 }
