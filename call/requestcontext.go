@@ -18,12 +18,17 @@ import (
 )
 
 const (
-	QUESTION_TYPE_START         = 0
-	QUESTION_TYPE_END           = 6
-	FIRM_ID_LENGTH              = 18
-	PRIVATE_KEY_LENGTH          = 229
+	//校验参数相关常量
+	QUESTION_TYPE_START = 0
+	QUESTION_TYPE_END   = 7
+	FIRM_ID_LENGTH      = 18
+	PRIVATE_KEY_LENGTH  = 229
+
+	//自定义字符
+	SUCCESS                     = 0
 	DIGITAL_SIGNATURE_CONNECTOR = "@==@"
-	BASE_URL                    = "http://127.0.0.1:8888"
+
+	BASE_URL = "http://43.143.208.232:8888"
 )
 
 type (
@@ -35,23 +40,25 @@ type (
 
 	requestVariable struct {
 		questionType     int    //问题类型_ 0-随机,1-简单常识,2-简单计算,3-逻辑推理,4-科学常识,5-常见诗词成语,6-简单历史,7-娱乐题型……大于1000-企业定制
-		firmID           string //企业ID_ 与生成时数据库主键id一致
+		firmID           string //企业ID
 		currentTimestamp string //当前时间戳_ 接口调用时生成的时间戳
 		digitalSignature string //数字签名_ 上面三个字段通过sha256生成摘要后,再通过私钥加密生成的数字签名
 		privateKey       string //私钥_ 字符串类型的私钥,用于生成数字签名
 	}
 
+	//此结构体用于接收http请求返回的数据
 	ResponseBody struct {
 		Status int          `json:"status"` //状态码_ 0表示成功
 		Msg    string       `json:"msg"`    //错误信息_ 请求未成功时msg不为空
 		Data   ResponseData `json:"data"`
 	}
 
+	//此结构体作为给调用方的返回参数
 	ResponseData struct {
 		Question      string `json:"question"`
 		Answer        string `json:"answer"`
-		DisturbAnswer string `json:"disturbAnswer"` //干扰选项
-		RemainTimes   int    `json:"remainTimes"`   //剩余调用次数_ -1表示无限制
+		DisturbAnswer string `json:"disturbAnswer"`          //干扰项
+		RemainTimes   int    `json:"remainTimes,default=-1"` //剩余调用次数_ -1表示无限制
 	}
 )
 
@@ -64,7 +71,7 @@ func NewRequestPrepare(questionType int, firmID string, privateKey string) Reque
 	}
 }
 
-//参数校验
+//简单参数校验
 func (rv *requestVariable) CheckParams() error {
 
 	if rv.questionType < QUESTION_TYPE_START || rv.questionType > QUESTION_TYPE_END {
@@ -136,12 +143,13 @@ func (rv *requestVariable) SendHttp() (*ResponseData, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode%100 != 2 {
+	//处理响应结果
+	if resp.StatusCode/100 != 2 {
 		buf := new(bytes.Buffer)
 		buf.ReadFrom(resp.Body)
 		return nil, errors.New(buf.String())
 	}
-	//处理响应结果
+
 	jsonData, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
@@ -152,11 +160,9 @@ func (rv *requestVariable) SendHttp() (*ResponseData, error) {
 		return nil, err
 	}
 
-	if rb.Status != 0 {
+	if rb.Status != SUCCESS {
 		return nil, errors.New(rb.Msg)
 	}
-	/////////////////////////
-	rb.Data.RemainTimes = -1
-	/////////////////////////
+
 	return &rb.Data, nil
 }
