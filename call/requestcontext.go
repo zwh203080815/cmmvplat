@@ -57,8 +57,8 @@ type (
 	ResponseData struct {
 		Question      string `json:"question"`
 		Answer        string `json:"answer"`
-		DisturbAnswer string `json:"disturbAnswer"`          //干扰项
-		RemainTimes   int    `json:"remainTimes,default=-1"` //剩余调用次数_ -1表示无限制
+		DisturbAnswer string `json:"disturbAnswer"` //干扰项
+		RemainTimes   int    `json:"remainTimes"`   //剩余调用次数_ -1表示无限制
 	}
 )
 
@@ -69,6 +69,22 @@ func NewRequestPrepare(questionType int, firmID string, privateKey string) Reque
 		currentTimestamp: strconv.FormatInt(time.Now().UnixNano(), 10),
 		privateKey:       privateKey,
 	}
+}
+
+// ResponseData Unmarshal时，在RemainTimes字段为空的时候给予默认值
+func (rd *ResponseData) UnmarshalJSON(data []byte) error {
+	type rdAlias ResponseData
+	resp := &rdAlias{
+		RemainTimes: -1,
+	}
+
+	if err := json.Unmarshal(data, resp); err != nil {
+		return err
+	}
+
+	*rd = ResponseData(*resp)
+
+	return nil
 }
 
 //简单参数校验
