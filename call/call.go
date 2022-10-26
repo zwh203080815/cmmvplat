@@ -25,10 +25,10 @@ func GetItem(questionType int, firmID string, privateKey string) (*ResponseData,
 }
 
 //此接口需传入私钥文件路径_ 私钥编码格式为pem
-func GetItemByPath(questionType int, firmID string, privateKeyFilePath string) (*ResponseData, error) {
+func GetItemByKeyPath(questionType int, firmID string, privateKeyFile string) (*ResponseData, error) {
 
 	//读取私钥文件
-	file, err := os.Open(privateKeyFilePath)
+	file, err := os.Open(privateKeyFile)
 	if err != nil {
 		return nil, err
 	}

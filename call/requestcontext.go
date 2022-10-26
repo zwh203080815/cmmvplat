@@ -28,11 +28,11 @@ const (
 	SUCCESS                     = 0
 	DIGITAL_SIGNATURE_CONNECTOR = "@==@"
 
-	BASE_URL = "http://43.143.208.232:8888"
+	BASE_URL = "https://cmmvplat.com:8888/output"
 )
 
 type (
-	RequestPrepare interface {
+	RequestPreparer interface {
 		CheckParams() error
 		GenerateDigitalSignature() error
 		SendHttp() (*ResponseData, error)
@@ -62,7 +62,7 @@ type (
 	}
 )
 
-func NewRequestPrepare(questionType int, firmID string, privateKey string) RequestPrepare {
+func NewRequestPrepare(questionType int, firmID string, privateKey string) RequestPreparer {
 	return &requestVariable{
 		questionType:     questionType,
 		firmID:           firmID,
